@@ -47,33 +47,62 @@ static FT_HANDLE ftHandle;
 static uint8 buffer[SPI_DEVICE_BUFFER_SIZE] = {0};
 
 
-int _tmain(int argc, _TCHAR* argv[])
-{
-	DWORD count = 0;
-	DWORD devIndex = 0;
-	char buffer[64];
-	DWORD numDevs = 0;
+int _tmain(int argc, _TCHAR* argv[]) {
+	FT_STATUS status = FT_OK;
+	FT_DEVICE_LIST_INFO_NODE devList = {0};
+	ChannelConfig channelConf = {0};
+	uint8 address = 0;
+	uint32 channels = 0;
+	uint16 data = 0;
+	uint8 i = 0;
+	uint8 latency = 255;	
+	
+	channelConf.ClockRate = 5000;
+	channelConf.LatencyTimer = latency;
+	channelConf.configOptions = SPI_CONFIG_OPTION_MODE0 | SPI_CONFIG_OPTION_CS_DBUS3;// | SPI_CONFIG_OPTION_CS_ACTIVELOW;
+	channelConf.Pin = 0x00000000;/*FinalVal-FinalDir-InitVal-InitDir (for dir 0=in, 1=out)*/
 
-	ftStatus = FT_ListDevices(&numDevs,NULL, FT_LIST_NUMBER_ONLY);
-	if (ftStatus == FT_OK) {
-		printf("Found %d devices\r\n", numDevs);
-	}
-	else {
-		printf("ERROR, couldn't list devices: %d\r\n", ftStatus);
-		return 1;
-	}
-	ftStatus = FT_ListDevices((PVOID)devIndex,&buffer, FT_LIST_BY_INDEX|FT_OPEN_BY_SERIAL_NUMBER);
-	if (ftStatus != FT_OK) {
-		printf("ERROR, couldn't list devices: %d\r\n", ftStatus);
-		return 1;
-	}
-	ftStatus = FT_Open(0,&ftHandle);
-	if (ftStatus != FT_OK) {
-		printf("ERROR, couldn't open FT2232H device %d: %d\r\n", 1, ftStatus);
-		return 1;
+	/* init library */
+#ifdef _MSC_VER
+	Init_libMPSSE();
+#endif
+	status = SPI_GetNumChannels(&channels);
+	APP_CHECK_STATUS(status);
+	printf("Number of available SPI channels = %d\n",(int)channels);
+
+	if(channels>0)
+	{
+		for(i=0;i<channels;i++)
+		{
+			status = SPI_GetChannelInfo(i,&devList);
+			APP_CHECK_STATUS(status);
+			printf("Information on channel number %d:\n",i);
+			/* print the dev info */
+			printf("		Flags=0x%x\n",devList.Flags);
+			printf("		Type=0x%x\n",devList.Type);
+			printf("		ID=0x%x\n",devList.ID);
+			printf("		LocId=0x%x\n",devList.LocId);
+			printf("		SerialNumber=%s\n",devList.SerialNumber);
+			printf("		Description=%s\n",devList.Description);
+			printf("		ftHandle=0x%x\n",(unsigned int)devList.ftHandle);/*is 0 unless open*/
+		}
+
+		/* Open the first available channel */
+		status = SPI_OpenChannel(CHANNEL_TO_OPEN,&ftHandle);
+		APP_CHECK_STATUS(status);
+		printf("\nhandle=0x%x status=0x%x\n",(unsigned int)ftHandle,status);
+		status = SPI_InitChannel(ftHandle,&channelConf);
+		APP_CHECK_STATUS(status);
+	status = SPI_CloseChannel(ftHandle);
 	}
 
+#ifdef _MSC_VER
+	Cleanup_libMPSSE();
+#endif
 
+#ifndef __linux__
+	system("pause");
+#endif
 	return 0;
 }
 
