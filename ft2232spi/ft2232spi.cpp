@@ -55,11 +55,11 @@ int _tmain(int argc, _TCHAR* argv[]) {
 	uint32 channels = 0;
 	uint16 data = 0;
 	uint8 i = 0;
-	uint8 latency = 255;	
+	uint8 latency = 16;	
 	
-	channelConf.ClockRate = 5000;
+	channelConf.ClockRate = 20000;
 	channelConf.LatencyTimer = latency;
-	channelConf.configOptions = SPI_CONFIG_OPTION_MODE0 | SPI_CONFIG_OPTION_CS_DBUS3;// | SPI_CONFIG_OPTION_CS_ACTIVELOW;
+	channelConf.configOptions = SPI_CONFIG_OPTION_MODE0 | SPI_CONFIG_OPTION_CS_DBUS4 | SPI_CONFIG_OPTION_CS_ACTIVELOW;
 	channelConf.Pin = 0x00000000;/*FinalVal-FinalDir-InitVal-InitDir (for dir 0=in, 1=out)*/
 
 	/* init library */
@@ -72,6 +72,7 @@ int _tmain(int argc, _TCHAR* argv[]) {
 
 	if(channels>0)
 	{
+#if 0
 		for(i=0;i<channels;i++)
 		{
 			status = SPI_GetChannelInfo(i,&devList);
@@ -86,6 +87,7 @@ int _tmain(int argc, _TCHAR* argv[]) {
 			printf("		Description=%s\n",devList.Description);
 			printf("		ftHandle=0x%x\n",(unsigned int)devList.ftHandle);/*is 0 unless open*/
 		}
+#endif
 
 		/* Open the first available channel */
 		status = SPI_OpenChannel(CHANNEL_TO_OPEN,&ftHandle);
@@ -93,7 +95,17 @@ int _tmain(int argc, _TCHAR* argv[]) {
 		printf("\nhandle=0x%x status=0x%x\n",(unsigned int)ftHandle,status);
 		status = SPI_InitChannel(ftHandle,&channelConf);
 		APP_CHECK_STATUS(status);
-	status = SPI_CloseChannel(ftHandle);
+
+		// Write some data for the lattice iCE40Ultra EVK demo
+		uint32 sizeTransferred;
+		buffer[0] = 0x19;
+		buffer[1] = 0x67; // Color 6 (cyan), brightness 7 (50%)
+		buffer[2] = 0x20; // Ramp 2, blink rate 0
+		status = SPI_Write(ftHandle, buffer, 3, &sizeTransferred, SPI_TRANSFER_OPTIONS_SIZE_IN_BYTES | SPI_TRANSFER_OPTIONS_CHIPSELECT_ENABLE | SPI_TRANSFER_OPTIONS_CHIPSELECT_ENABLE);
+		APP_CHECK_STATUS(status);
+		printf("Wrote %d bytes\r\n", sizeTransferred);
+
+		status = SPI_CloseChannel(ftHandle);
 	}
 
 #ifdef _MSC_VER
