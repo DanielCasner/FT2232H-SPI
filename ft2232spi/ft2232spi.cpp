@@ -50,10 +50,10 @@ int _tmain(int argc, _TCHAR* argv[]) {
 	uint16 data = 0;
 	uint8 i = 0;
 	
-	channelConf.ClockRate = 400000;
+	channelConf.ClockRate = 1000000;
 	channelConf.LatencyTimer = 255;
 	channelConf.configOptions = SPI_CONFIG_OPTION_MODE0 | SPI_CONFIG_OPTION_CS_DBUS4 | SPI_CONFIG_OPTION_CS_ACTIVELOW;
-	channelConf.Pin = 0xFFff0000;/*FinalVal-FinalDir-InitVal-InitDir (for dir 0=in, 1=out)*/
+	channelConf.Pin = 0x00000000;/*FinalVal-FinalDir-InitVal-InitDir (for dir 0=in, 1=out)*/
 	channelConf.reserved = 0;
 
 	/* init library */
@@ -93,11 +93,19 @@ int _tmain(int argc, _TCHAR* argv[]) {
 		// Write some data for the lattice iCE40Ultra EVK demo
 		uint32 sizeTransferred;
 
+#if 0
+		wBuffer[0] = 0x19;
+		wBuffer[1] = 0x67; // Color 6 (cyan), brightness 7 (50%)
+		wBuffer[2] = 0x20; // Ramp 2, blink rate 0
+		sizeTransferred= 3;
+#else
 		wBuffer[0] = 0x7e; // Programming sync pattern
 		wBuffer[1] = 0xaa;
 		wBuffer[2] = 0x99;
 		wBuffer[3] = 0x7e;
-		status = SPI_ReadWrite(ftHandle, rBuffer, wBuffer, 4, &sizeTransferred, SPI_OPTS);
+		sizeTransferred = 4;
+#endif
+		status = SPI_ReadWrite(ftHandle, rBuffer, wBuffer, sizeTransferred, &sizeTransferred, SPI_OPTS);
 		APP_CHECK_STATUS(status);
 		printf("Wrote/Read %d bytes\r\n", sizeTransferred);
 		unsigned long retry = 0;
