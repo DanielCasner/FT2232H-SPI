@@ -32,7 +32,7 @@ encountered \n",__FILE__, __LINE__, __FUNCTION__);exit(1);}else{;}};
 #define SPI_DEVICE_BUFFER_SIZE		256
 #define CHANNEL_TO_OPEN			0	/*0 for first available channel, 1 for next... */
 #define SPI_WRITE_COMPLETION_RETRY 100
-#define SPI_OPTS               SPI_TRANSFER_OPTIONS_SIZE_IN_BYTES | SPI_TRANSFER_OPTIONS_CHIPSELECT_ENABLE | SPI_TRANSFER_OPTIONS_CHIPSELECT_ENABLE
+#define SPI_OPTS               SPI_TRANSFER_OPTIONS_SIZE_IN_BYTES | SPI_TRANSFER_OPTIONS_CHIPSELECT_ENABLE | SPI_TRANSFER_OPTIONS_CHIPSELECT_DISABLE
 
 /* Globals */
 static FT_STATUS ftStatus;
@@ -92,15 +92,12 @@ int _tmain(int argc, _TCHAR* argv[]) {
 
 		// Write some data for the lattice iCE40Ultra EVK demo
 		uint32 sizeTransferred;
-		
-		// Make sure we are out of programming mode
-		status = SPI_Read(ftHandle, rBuffer, 50, &sizeTransferred, SPI_OPTS);
-		APP_CHECK_STATUS(status);
 
-		wBuffer[0] = 0x19;
-		wBuffer[1] = 0x67; // Color 6 (cyan), brightness 7 (50%)
-		wBuffer[2] = 0x20; // Ramp 2, blink rate 0
-		status = SPI_ReadWrite(ftHandle, rBuffer, wBuffer, 3, &sizeTransferred, SPI_OPTS);
+		wBuffer[0] = 0x7e; // Programming sync pattern
+		wBuffer[1] = 0xaa;
+		wBuffer[2] = 0x99;
+		wBuffer[3] = 0x7e;
+		status = SPI_ReadWrite(ftHandle, rBuffer, wBuffer, 4, &sizeTransferred, SPI_OPTS);
 		APP_CHECK_STATUS(status);
 		printf("Wrote/Read %d bytes\r\n", sizeTransferred);
 		unsigned long retry = 0;
