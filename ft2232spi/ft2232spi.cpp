@@ -30,21 +30,15 @@ encountered \n",__FILE__, __LINE__, __FUNCTION__);exit(1);}else{;}};
 
 /* Definitions */
 #define SPI_DEVICE_BUFFER_SIZE		256
-#define SPI_WRITE_COMPLETION_RETRY		10
-#define START_ADDRESS_EEPROM 	0x00 /*read/write start address inside the EEPROM*/
-#define END_ADDRESS_EEPROM		0x10
-#define RETRY_COUNT_EEPROM		10	/* number of retries if read/write fails */
 #define CHANNEL_TO_OPEN			0	/*0 for first available channel, 1 for next... */
-#define SPI_SLAVE_0				0
-#define SPI_SLAVE_1				1
-#define SPI_SLAVE_2				2
-#define DATA_OFFSET				4
-#define USE_WRITEREAD			0
+#define SPI_WRITE_COMPLETION_RETRY 100
+#define SPI_OPTS               SPI_TRANSFER_OPTIONS_SIZE_IN_BYTES | SPI_TRANSFER_OPTIONS_CHIPSELECT_ENABLE | SPI_TRANSFER_OPTIONS_CHIPSELECT_ENABLE
 
 /* Globals */
 static FT_STATUS ftStatus;
 static FT_HANDLE ftHandle;
-static uint8 buffer[SPI_DEVICE_BUFFER_SIZE] = {0};
+static uint8 wBuffer[SPI_DEVICE_BUFFER_SIZE] = {0};
+static uint8 rBuffer[SPI_DEVICE_BUFFER_SIZE] = {0};
 
 
 int _tmain(int argc, _TCHAR* argv[]) {
@@ -55,12 +49,12 @@ int _tmain(int argc, _TCHAR* argv[]) {
 	uint32 channels = 0;
 	uint16 data = 0;
 	uint8 i = 0;
-	uint8 latency = 16;	
 	
-	channelConf.ClockRate = 20000;
-	channelConf.LatencyTimer = latency;
+	channelConf.ClockRate = 400000;
+	channelConf.LatencyTimer = 255;
 	channelConf.configOptions = SPI_CONFIG_OPTION_MODE0 | SPI_CONFIG_OPTION_CS_DBUS4 | SPI_CONFIG_OPTION_CS_ACTIVELOW;
-	channelConf.Pin = 0x00000000;/*FinalVal-FinalDir-InitVal-InitDir (for dir 0=in, 1=out)*/
+	channelConf.Pin = 0xFFff0000;/*FinalVal-FinalDir-InitVal-InitDir (for dir 0=in, 1=out)*/
+	channelConf.reserved = 0;
 
 	/* init library */
 #ifdef _MSC_VER
@@ -98,12 +92,27 @@ int _tmain(int argc, _TCHAR* argv[]) {
 
 		// Write some data for the lattice iCE40Ultra EVK demo
 		uint32 sizeTransferred;
-		buffer[0] = 0x19;
-		buffer[1] = 0x67; // Color 6 (cyan), brightness 7 (50%)
-		buffer[2] = 0x20; // Ramp 2, blink rate 0
-		status = SPI_Write(ftHandle, buffer, 3, &sizeTransferred, SPI_TRANSFER_OPTIONS_SIZE_IN_BYTES | SPI_TRANSFER_OPTIONS_CHIPSELECT_ENABLE | SPI_TRANSFER_OPTIONS_CHIPSELECT_ENABLE);
+		
+		// Make sure we are out of programming mode
+		status = SPI_Read(ftHandle, rBuffer, 50, &sizeTransferred, SPI_OPTS);
 		APP_CHECK_STATUS(status);
-		printf("Wrote %d bytes\r\n", sizeTransferred);
+
+		wBuffer[0] = 0x19;
+		wBuffer[1] = 0x67; // Color 6 (cyan), brightness 7 (50%)
+		wBuffer[2] = 0x20; // Ramp 2, blink rate 0
+		status = SPI_ReadWrite(ftHandle, rBuffer, wBuffer, 3, &sizeTransferred, SPI_OPTS);
+		APP_CHECK_STATUS(status);
+		printf("Wrote/Read %d bytes\r\n", sizeTransferred);
+		unsigned long retry = 0;
+		bool state=FALSE;
+		SPI_IsBusy(ftHandle,&state);
+		while((FALSE==state) && (retry<SPI_WRITE_COMPLETION_RETRY))
+		{
+			printf("SPI device is busy(%u)\n",(unsigned)retry);
+			SPI_IsBusy(ftHandle,&state);
+			retry++;
+		}
+		printf("Read %02x %02x %02x\r\n", rBuffer[0], rBuffer[1], rBuffer[2]);
 
 		status = SPI_CloseChannel(ftHandle);
 	}
