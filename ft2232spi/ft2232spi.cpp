@@ -29,31 +29,48 @@
 encountered \n",__FILE__, __LINE__, __FUNCTION__);exit(1);}else{;}};
 
 /* Definitions */
+#define PROG_BUFFER_SIZE        4000000
 #define SPI_DEVICE_BUFFER_SIZE		256
 #define CHANNEL_TO_OPEN			0	/*0 for first available channel, 1 for next... */
 #define SPI_WRITE_COMPLETION_RETRY 100
 #define SPI_OPTS               SPI_TRANSFER_OPTIONS_SIZE_IN_BYTES | SPI_TRANSFER_OPTIONS_CHIPSELECT_ENABLE | SPI_TRANSFER_OPTIONS_CHIPSELECT_DISABLE
+#define GPIO_DIR			   0x93 /* 0b10010011 */
+#define GPIO_INIT			   GPIO_DIR /* Everything that's an output should be set high */
 
 /* Globals */
-static FT_STATUS ftStatus;
-static FT_HANDLE ftHandle;
-static uint8 wBuffer[SPI_DEVICE_BUFFER_SIZE] = {0};
-static uint8 rBuffer[SPI_DEVICE_BUFFER_SIZE] = {0};
 
 
 int _tmain(int argc, _TCHAR* argv[]) {
+	FT_STATUS ftStatus;
+	FT_HANDLE ftHandle;
+	uint8* wBuffer = new uint8[PROG_BUFFER_SIZE];
+	uint8* rBuffer = new uint8[SPI_DEVICE_BUFFER_SIZE];
+
+	FILE* fileHandle;
+	size_t fileSize;
 	FT_STATUS status = FT_OK;
 	FT_DEVICE_LIST_INFO_NODE devList = {0};
 	ChannelConfig channelConf = {0};
 	uint8 address = 0;
 	uint32 channels = 0;
+	uint32 sizeTransferred;
 	uint16 data = 0;
 	uint8 i = 0;
 	
+	if (wBuffer == NULL) {
+		printf("Couln't allocate memeory for write buffer.\r\n");
+		exit(1);
+	}
+	if (rBuffer == NULL) {
+		printf("Couln't allocate memeory for read buffer.\r\n");
+		exit(1);
+	}
+
+
 	channelConf.ClockRate = 1000000;
 	channelConf.LatencyTimer = 255;
 	channelConf.configOptions = SPI_CONFIG_OPTION_MODE0 | SPI_CONFIG_OPTION_CS_DBUS4 | SPI_CONFIG_OPTION_CS_ACTIVELOW;
-	channelConf.Pin = 0x00000000;/*FinalVal-FinalDir-InitVal-InitDir (for dir 0=in, 1=out)*/
+	channelConf.Pin = 0;/*FinalVal-FinalDir-InitVal-InitDir (for dir 0=in, 1=out)*/
 	channelConf.reserved = 0;
 
 	/* init library */
@@ -66,32 +83,31 @@ int _tmain(int argc, _TCHAR* argv[]) {
 
 	if(channels>0)
 	{
-#if 0
-		for(i=0;i<channels;i++)
-		{
-			status = SPI_GetChannelInfo(i,&devList);
-			APP_CHECK_STATUS(status);
-			printf("Information on channel number %d:\n",i);
-			/* print the dev info */
-			printf("		Flags=0x%x\n",devList.Flags);
-			printf("		Type=0x%x\n",devList.Type);
-			printf("		ID=0x%x\n",devList.ID);
-			printf("		LocId=0x%x\n",devList.LocId);
-			printf("		SerialNumber=%s\n",devList.SerialNumber);
-			printf("		Description=%s\n",devList.Description);
-			printf("		ftHandle=0x%x\n",(unsigned int)devList.ftHandle);/*is 0 unless open*/
-		}
-#endif
-
 		/* Open the first available channel */
 		status = SPI_OpenChannel(CHANNEL_TO_OPEN,&ftHandle);
 		APP_CHECK_STATUS(status);
 		printf("\nhandle=0x%x status=0x%x\n",(unsigned int)ftHandle,status);
+
 		status = SPI_InitChannel(ftHandle,&channelConf);
 		APP_CHECK_STATUS(status);
 
+#if 0
+		// Reset the FPGA by setting C_RESETB as the chip select line and writing a dummy byte
+		status = SPI_ChangeCS(ftHandle, SPI_CONFIG_OPTION_CS_DBUS7 | SPI_CONFIG_OPTION_CS_ACTIVELOW);
+		APP_CHECK_STATUS(status);
+		SPI_Write(ftHandle, wBuffer, 1, &sizeTransferred, SPI_OPTS);
+		APP_CHECK_STATUS(status);
+
+		Sleep(1);
+
+		// Change the chip select back to the actual chip select
+		SPI_ChangeCS(ftHandle, SPI_CONFIG_OPTION_CS_DBUS4 | SPI_CONFIG_OPTION_CS_ACTIVELOW);
+		APP_CHECK_STATUS(status);
+
+		Sleep(1);
+#endif 
+
 		// Write some data for the lattice iCE40Ultra EVK demo
-		uint32 sizeTransferred;
 
 #if 0
 		wBuffer[0] = 0x19;
@@ -99,13 +115,34 @@ int _tmain(int argc, _TCHAR* argv[]) {
 		wBuffer[2] = 0x20; // Ramp 2, blink rate 0
 		sizeTransferred= 3;
 #else
-		wBuffer[0] = 0x7e; // Programming sync pattern
-		wBuffer[1] = 0xaa;
-		wBuffer[2] = 0x99;
-		wBuffer[3] = 0x7e;
-		sizeTransferred = 4;
+		fileHandle = fopen("C:\\Users\\DanielCascner\\Documents\\peripherals\\peripherals_Implmnt\\sbt\\outputs\\bitmap\\top_bitmap.bin", "rb");
+		if (fileHandle == NULL) {
+			printf("Couldn't open programming file\r\n");
+			exit(1);
+		}
+		fseek(fileHandle, 0, SEEK_END);
+		fileSize   = ftell(fileHandle);
+		printf("Programming file is %d bytes\r\n", fileSize);
+		fseek(fileHandle, 0, SEEK_SET);
+		
+		
+
+		wBuffer[0] = 0x00;
+		wBuffer[1] = 0x7e; // Programming sync pattern
+		wBuffer[2] = 0xaa;
+		wBuffer[3] = 0x99;
+		wBuffer[4] = 0x7e;
+		sizeTransferred = 5;
+		size_t bytesRead = fread((void*)(wBuffer + sizeTransferred), 1, fileSize, fileHandle);
+		if (bytesRead != fileSize) {
+			printf("Didn't read full programming file %d < %d\r\n", bytesRead, fileSize);
+			exit(1);
+		}
+		sizeTransferred += bytesRead;
+		for (int i=0; i<50; ++i) wBuffer[sizeTransferred++] = 0; // Add dummy bytes
+
 #endif
-		status = SPI_ReadWrite(ftHandle, rBuffer, wBuffer, sizeTransferred, &sizeTransferred, SPI_OPTS);
+		status = SPI_Write(ftHandle, wBuffer, sizeTransferred, &sizeTransferred, SPI_OPTS);
 		APP_CHECK_STATUS(status);
 		printf("Wrote/Read %d bytes\r\n", sizeTransferred);
 		unsigned long retry = 0;
@@ -117,7 +154,6 @@ int _tmain(int argc, _TCHAR* argv[]) {
 			SPI_IsBusy(ftHandle,&state);
 			retry++;
 		}
-		printf("Read %02x %02x %02x\r\n", rBuffer[0], rBuffer[1], rBuffer[2]);
 
 		status = SPI_CloseChannel(ftHandle);
 	}
