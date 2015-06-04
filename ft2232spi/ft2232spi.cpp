@@ -36,9 +36,7 @@ encountered \n",__FILE__, __LINE__, __FUNCTION__);exit(1);}else{;}};
 #define SPI_OPTS               SPI_TRANSFER_OPTIONS_SIZE_IN_BYTES | SPI_TRANSFER_OPTIONS_CHIPSELECT_ENABLE | SPI_TRANSFER_OPTIONS_CHIPSELECT_DISABLE
 #define GPIO_DIR			   0x93 /* 0b10010011 */
 #define GPIO_INIT			   GPIO_DIR /* Everything that's an output should be set high */
-
-/* Globals */
-
+#define RESET_CHIP
 
 int _tmain(int argc, _TCHAR* argv[]) {
 	FT_STATUS ftStatus;
@@ -67,10 +65,10 @@ int _tmain(int argc, _TCHAR* argv[]) {
 	}
 
 
-	channelConf.ClockRate = 1000000;
+	channelConf.ClockRate = 3000000;
 	channelConf.LatencyTimer = 255;
 	channelConf.configOptions = SPI_CONFIG_OPTION_MODE0 | SPI_CONFIG_OPTION_CS_DBUS4 | SPI_CONFIG_OPTION_CS_ACTIVELOW;
-	channelConf.Pin = 0;/*FinalVal-FinalDir-InitVal-InitDir (for dir 0=in, 1=out)*/
+	channelConf.Pin = 0x80B080B0;/*FinalVal-FinalDir-InitVal-InitDir (for dir 0=in, 1=out)*/
 	channelConf.reserved = 0;
 
 	/* init library */
@@ -91,9 +89,9 @@ int _tmain(int argc, _TCHAR* argv[]) {
 		status = SPI_InitChannel(ftHandle,&channelConf);
 		APP_CHECK_STATUS(status);
 
-#if 0
-		// Reset the FPGA by setting C_RESETB as the chip select line and writing a dummy byte
-		status = SPI_ChangeCS(ftHandle, SPI_CONFIG_OPTION_CS_DBUS7 | SPI_CONFIG_OPTION_CS_ACTIVELOW);
+#ifdef RESET_CHIP
+		// Reset the FPGA by setting a dummy pin as the chip select with active high which sets both SS and CRESET_B low
+		status = SPI_ChangeCS(ftHandle, SPI_CONFIG_OPTION_CS_DBUS5);
 		APP_CHECK_STATUS(status);
 		SPI_Write(ftHandle, wBuffer, 1, &sizeTransferred, SPI_OPTS);
 		APP_CHECK_STATUS(status);
@@ -106,15 +104,11 @@ int _tmain(int argc, _TCHAR* argv[]) {
 
 		Sleep(1);
 #endif 
+		
+
 
 		// Write some data for the lattice iCE40Ultra EVK demo
 
-#if 0
-		wBuffer[0] = 0x19;
-		wBuffer[1] = 0x67; // Color 6 (cyan), brightness 7 (50%)
-		wBuffer[2] = 0x20; // Ramp 2, blink rate 0
-		sizeTransferred= 3;
-#else
 		fileHandle = fopen("C:\\Users\\DanielCascner\\Documents\\peripherals\\peripherals_Implmnt\\sbt\\outputs\\bitmap\\top_bitmap.bin", "rb");
 		if (fileHandle == NULL) {
 			printf("Couldn't open programming file\r\n");
@@ -123,25 +117,15 @@ int _tmain(int argc, _TCHAR* argv[]) {
 		fseek(fileHandle, 0, SEEK_END);
 		fileSize   = ftell(fileHandle);
 		printf("Programming file is %d bytes\r\n", fileSize);
-		fseek(fileHandle, 0, SEEK_SET);
-		
-		
+		fseek(fileHandle, 0, SEEK_SET);		
 
-		wBuffer[0] = 0x00;
-		wBuffer[1] = 0x7e; // Programming sync pattern
-		wBuffer[2] = 0xaa;
-		wBuffer[3] = 0x99;
-		wBuffer[4] = 0x7e;
-		sizeTransferred = 5;
-		size_t bytesRead = fread((void*)(wBuffer + sizeTransferred), 1, fileSize, fileHandle);
-		if (bytesRead != fileSize) {
-			printf("Didn't read full programming file %d < %d\r\n", bytesRead, fileSize);
+		sizeTransferred = fread(wBuffer, sizeof(uint8), fileSize, fileHandle);
+		if (sizeTransferred != fileSize) {
+			printf("Didn't read full programming file %d < %d\r\n", sizeTransferred, fileSize);
 			exit(1);
 		}
-		sizeTransferred += bytesRead;
 		for (int i=0; i<50; ++i) wBuffer[sizeTransferred++] = 0; // Add dummy bytes
 
-#endif
 		status = SPI_Write(ftHandle, wBuffer, sizeTransferred, &sizeTransferred, SPI_OPTS);
 		APP_CHECK_STATUS(status);
 		printf("Wrote/Read %d bytes\r\n", sizeTransferred);
@@ -157,6 +141,9 @@ int _tmain(int argc, _TCHAR* argv[]) {
 
 		status = SPI_CloseChannel(ftHandle);
 	}
+
+	delete wBuffer;
+	delete rBuffer;
 
 #ifdef _MSC_VER
 	Cleanup_libMPSSE();
