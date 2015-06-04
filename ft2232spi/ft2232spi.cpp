@@ -34,9 +34,9 @@ encountered \n",__FILE__, __LINE__, __FUNCTION__);exit(1);}else{;}};
 #define CHANNEL_TO_OPEN			0	/*0 for first available channel, 1 for next... */
 #define SPI_WRITE_COMPLETION_RETRY 100
 #define SPI_OPTS               SPI_TRANSFER_OPTIONS_SIZE_IN_BYTES | SPI_TRANSFER_OPTIONS_CHIPSELECT_ENABLE | SPI_TRANSFER_OPTIONS_CHIPSELECT_DISABLE
-#define GPIO_DIR			   0x93 /* 0b10010011 */
 #define GPIO_INIT			   GPIO_DIR /* Everything that's an output should be set high */
-#define RESET_CHIP
+//#define RESET_CHIP
+#define TEST_COMMUNICATION
 
 int _tmain(int argc, _TCHAR* argv[]) {
 	FT_STATUS ftStatus;
@@ -128,7 +128,7 @@ int _tmain(int argc, _TCHAR* argv[]) {
 
 		status = SPI_Write(ftHandle, wBuffer, sizeTransferred, &sizeTransferred, SPI_OPTS);
 		APP_CHECK_STATUS(status);
-		printf("Wrote/Read %d bytes\r\n", sizeTransferred);
+		printf("Transferred %d bytes\r\n", sizeTransferred);
 		unsigned long retry = 0;
 		bool state=FALSE;
 		SPI_IsBusy(ftHandle,&state);
@@ -139,6 +139,17 @@ int _tmain(int argc, _TCHAR* argv[]) {
 			retry++;
 		}
 
+#ifdef TEST_COMMUNICATION
+		Sleep(10);
+
+		for (sizeTransferred = 0; sizeTransferred < 10; sizeTransferred++) wBuffer[sizeTransferred] = sizeTransferred;
+		status = SPI_ReadWrite(ftHandle, rBuffer, wBuffer, sizeTransferred, &sizeTransferred, SPI_OPTS);
+		APP_CHECK_STATUS(status);
+		printf("Transferred %d bytes\r\n", sizeTransferred);
+		rBuffer[sizeTransferred] = 0;
+		printf("Received %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x \r\n", rBuffer[0], rBuffer[1], rBuffer[2], rBuffer[3], rBuffer[4], rBuffer[5], rBuffer[6], rBuffer[7], rBuffer[8], rBuffer[9]);
+		
+#endif
 		status = SPI_CloseChannel(ftHandle);
 	}
 
