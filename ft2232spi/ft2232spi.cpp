@@ -29,7 +29,6 @@
 encountered \n",__FILE__, __LINE__, __FUNCTION__);exit(1);}else{;}};
 
 /* Definitions */
-#define PROG_BUFFER_SIZE        4000000
 #define SPI_DEVICE_BUFFER_SIZE		256
 #define CHANNEL_TO_OPEN			0	/*0 for first available channel, 1 for next... */
 #define SPI_WRITE_COMPLETION_RETRY 100
@@ -41,7 +40,7 @@ encountered \n",__FILE__, __LINE__, __FUNCTION__);exit(1);}else{;}};
 int _tmain(int argc, _TCHAR* argv[]) {
 	FT_STATUS ftStatus;
 	FT_HANDLE ftHandle;
-	uint8* wBuffer = new uint8[PROG_BUFFER_SIZE];
+	uint8* wBuffer = new uint8[SPI_DEVICE_BUFFER_SIZE];
 	uint8* rBuffer = new uint8[SPI_DEVICE_BUFFER_SIZE];
 
 	FILE* fileHandle;
@@ -68,7 +67,7 @@ int _tmain(int argc, _TCHAR* argv[]) {
 	channelConf.ClockRate = 3000000;
 	channelConf.LatencyTimer = 255;
 	channelConf.configOptions = SPI_CONFIG_OPTION_MODE0 | SPI_CONFIG_OPTION_CS_DBUS4 | SPI_CONFIG_OPTION_CS_ACTIVELOW;
-	channelConf.Pin = 0x80B080B0;/*FinalVal-FinalDir-InitVal-InitDir (for dir 0=in, 1=out)*/
+	channelConf.Pin = 0xF0B0F0B0;/*FinalVal-FinalDir-InitVal-InitDir (for dir 0=in, 1=out)*/
 	channelConf.reserved = 0;
 
 	/* init library */
@@ -89,68 +88,14 @@ int _tmain(int argc, _TCHAR* argv[]) {
 		status = SPI_InitChannel(ftHandle,&channelConf);
 		APP_CHECK_STATUS(status);
 
-#ifdef RESET_CHIP
-		// Reset the FPGA by setting a dummy pin as the chip select with active high which sets both SS and CRESET_B low
-		status = SPI_ChangeCS(ftHandle, SPI_CONFIG_OPTION_CS_DBUS5);
-		APP_CHECK_STATUS(status);
-		SPI_Write(ftHandle, wBuffer, 1, &sizeTransferred, SPI_OPTS);
-		APP_CHECK_STATUS(status);
-
-		Sleep(1);
-
-		// Change the chip select back to the actual chip select
-		SPI_ChangeCS(ftHandle, SPI_CONFIG_OPTION_CS_DBUS4 | SPI_CONFIG_OPTION_CS_ACTIVELOW);
-		APP_CHECK_STATUS(status);
-
-		Sleep(1);
-#endif 
-		
-
-
-		// Write some data for the lattice iCE40Ultra EVK demo
-
-		fileHandle = fopen("C:\\Users\\DanielCascner\\Documents\\peripherals\\peripherals_Implmnt\\sbt\\outputs\\bitmap\\top_bitmap.bin", "rb");
-		if (fileHandle == NULL) {
-			printf("Couldn't open programming file\r\n");
-			exit(1);
-		}
-		fseek(fileHandle, 0, SEEK_END);
-		fileSize   = ftell(fileHandle);
-		printf("Programming file is %d bytes\r\n", fileSize);
-		fseek(fileHandle, 0, SEEK_SET);		
-
-		sizeTransferred = fread(wBuffer, sizeof(uint8), fileSize, fileHandle);
-		if (sizeTransferred != fileSize) {
-			printf("Didn't read full programming file %d < %d\r\n", sizeTransferred, fileSize);
-			exit(1);
-		}
-		for (int i=0; i<50; ++i) wBuffer[sizeTransferred++] = 0; // Add dummy bytes
-
-		status = SPI_Write(ftHandle, wBuffer, sizeTransferred, &sizeTransferred, SPI_OPTS);
-		APP_CHECK_STATUS(status);
-		printf("Transferred %d bytes\r\n", sizeTransferred);
-		unsigned long retry = 0;
-		bool state=FALSE;
-		SPI_IsBusy(ftHandle,&state);
-		while((FALSE==state) && (retry<SPI_WRITE_COMPLETION_RETRY))
-		{
-			printf("SPI device is busy(%u)\n",(unsigned)retry);
-			SPI_IsBusy(ftHandle,&state);
-			retry++;
-		}
-
-#ifdef TEST_COMMUNICATION
-		Sleep(10);
-
 		for (sizeTransferred = 0; sizeTransferred < 10; sizeTransferred++) wBuffer[sizeTransferred] = sizeTransferred;
 		status = SPI_ReadWrite(ftHandle, rBuffer, wBuffer, sizeTransferred, &sizeTransferred, SPI_OPTS);
 		APP_CHECK_STATUS(status);
 		printf("Transferred %d bytes\r\n", sizeTransferred);
 		rBuffer[sizeTransferred] = 0;
 		printf("Received %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x \r\n", rBuffer[0], rBuffer[1], rBuffer[2], rBuffer[3], rBuffer[4], rBuffer[5], rBuffer[6], rBuffer[7], rBuffer[8], rBuffer[9]);
-		
-#endif
-		status = SPI_CloseChannel(ftHandle);
+
+
 	}
 
 	delete wBuffer;
